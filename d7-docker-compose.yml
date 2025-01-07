@@ -1,0 +1,87 @@
+---
+version: "3.7"
+services:
+  mysql:
+    image: mysql:${MYSQL_TAG}
+    container_name: "${PROJECT_NAME}_mysql"
+    stop_grace_period: 30s
+    tty: true
+    environment:
+      - MYSQL_ROOT_PASSWORD_FILE=${MYSQL_ROOT_PASSWORD_FILE_PATH}
+      - MYSQL_PASSWORD_FILE=${MYSQL_USER_PASSWORD_FILE_PATH}
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+    secrets:
+      - password_root
+      - password_user
+    volumes:
+      - ${MYSQL_INIT_DB_HOST_FOLDER}:/docker-entrypoint-initdb.d
+      - ${MYSQL_DB_DATA_HOST_FOLDER}:/var/lib/mysql:delegated
+      - ${EXTRA_FILES_LOCATION}/mysql:/etc/mysql/conf.d
+      
+  php:
+    build:
+      context: .
+      dockerfile: php.docker
+      args:
+        PHP_TAG: ${PHP_TAG}
+        NETFREE: ${NETFREE}
+        DOCKER_USER_HOME_FOLDER: ${DOCKER_USER_HOME_FOLDER}
+        EXTRA_FILES_LOCATION: ${EXTRA_FILES_LOCATION}
+        DOCKER_USER_NAME: ${DOCKER_USER_NAME}
+        PHP_XDEBUG_CLIENT_PORT: ${PHP_XDEBUG_CLIENT_PORT}
+    container_name: ${PROJECT_NAME}_php
+    environment:
+      PHP_FPM_USER: ${DOCKER_USER_NAME}
+      PHP_FPM_GROUP: ${DOCKER_USER_NAME}
+      COLUMNS: 80
+      PHP_XDEBUG: 1
+      PHP_XDEBUG_MODE: debug,develop
+      PHP_XDEBUG_START_WITH_REQUEST: "yes"
+      PHP_XDEBUG_IDEKEY: "VSCODE"
+      PHP_XDEBUG_CLIENT_PORT: ${PHP_XDEBUG_CLIENT_PORT}
+      PHP_XDEBUG_LOG: /tmp/php-xdebug.log
+      PHP_MEMORY_LIMIT: 4G
+    volumes:
+      - ${SITE_LOCATION}:${PROJECT_SITE_INNER_LOCATION}:cached
+      - /home/$USERNAME/.ssh:${DOCKER_USER_HOME_FOLDER}/.ssh
+      - ${PROJECT_HOST_MOUNTS_LOCATION}/docker_bash_history_d9:${DOCKER_USER_HOME_FOLDER}/.bash_history
+      - /tmp/docker/${PROJECT_NAME}:/mnt/files
+      - /home/$USERNAME:/home/$USERNAME
+      
+  nginx:
+    image: webdevops/nginx:alpine
+    container_name: ${PROJECT_NAME}_nginx
+    hostname: ${PROJECT_BASE_URL}
+    depends_on:
+      - php
+    environment:
+      WEB_PHP_SOCKET: ${NGINX_WEB_PHP_SOCKET_TO_SERVER}
+      WEB_DOCUMENT_ROOT: ${PROJECT_SITE_INNER_LOCATION}
+    ports:
+      - ${NGINX_PORTAINER_PORT}:${NGINX_INNER_PORT}    
+    volumes:
+      - ${SITE_LOCATION}:${PROJECT_SITE_INNER_LOCATION}:cached
+    labels:
+      - "traefik.http.routers.${PROJECT_NAME}_nginx.rule=Host(`${PROJECT_BASE_URL}`)"
+      
+  adminer:
+    container_name: ${PROJECT_NAME}_adminer
+    image: michalhosna/adminer
+    environment:
+      ADMINER_DB: ${DB_NAME}
+      ADMINER_SERVER: ${DB_HOST}
+      ADMINER_USERNAME: ${ADMINER_USERNAME}
+      ADMINER_NAME: ${ADMINER_UI_PRESENTATION_NAME}
+    ports:
+      - ${ADMINER_PORTAINER_PORT}:${ADMINER_INNER_PORT}
+    labels:
+      - "traefik.http.routers.${PROJECT_NAME}_adminer.rule=Host(`adminer.${PROJECT_BASE_URL}`)"
+      #- ${ADMINER_TRAEFIK_SERVICE_PORT_RULE}
+    
+secrets:
+  password_root:
+    file: ${SECRET_PASSWORD_ROOT}
+  password_user:
+    file: ${SECRET_PASSWORD_USER}
+
