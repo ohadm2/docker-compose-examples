@@ -1,0 +1,30 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Add custom MySQL config to change authentication plugin if needed
+      - ./my.cnf:/etc/mysql/my.cnf
+
+  proxysql:
+    image: proxysql/proxysql:2.5.3
+    container_name: proxysql
+    ports:
+      - "6033:6033"   # MySQL clients connect here
+      - "6032:6032"   # Admin interface
+    volumes:
+      - proxysql_data:/var/lib/proxysql
+      - ./proxysql.cnf:/etc/proxysql.cnf
+    depends_on:
+      - mysql
+
+volumes:
+  mysql_data:
+  proxysql_data:
+
