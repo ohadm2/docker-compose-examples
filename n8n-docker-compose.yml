@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  n8n:
+    image: n8nio/n8n
+    depends_on:
+      - ollama
+      - prowler
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_RUNNERS_ENABLED=true
+      - DB_SQLITE_POOL_SIZE=10000
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=supersecret
+      - N8N_HOST=n8n.local
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - DB_TYPE=sqlite
+      - DB_SQLITE_VACUUM_ON_STARTUP=true
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./workflows:/workflows
+    entrypoint: ["/bin/ash","-c"]
+    command: >
+      "
+        if [ ! -f /home/node/.n8n/.workflow_imported ]; then
+          echo 'Importing Prowler GCP workflow...';
+          n8n import:workflow --input=/workflows/prowler-gcp-scan.json && touch /home/node/.n8n/.workflow_imported;
+        fi;
+        n8n start
+      "
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama-data:/root/.ollama
+    entrypoint: ["/bin/bash","-c"]
+    command: >
+      "
+        ollama serve &
+        sleep 5 &&
+        ollama pull phi &&
+        wait
+      "
+
+  prowler:
+    image: prowlercloud/prowler
+    container_name: prowler
+    restart: "no"
+    ports:
+      - "3000:3000"    # Main interface
+      - "2345:8080"    # API endpoint
+    command: ["sleep", "infinity"]
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/prowler/gcp-key.json
+    volumes:
+      - ./prowler-output:/prowler/output
+      - ./gcp-key.json:/prowler/gcp-key.json:ro
+
+volumes:
+  n8n-data:
+  ollama-data:
+
